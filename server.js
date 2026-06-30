@@ -68,25 +68,14 @@ app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Serve static files from uploads directory
+// ========================================================
+// ✅ Serve static files BEFORE API routes
+// ========================================================
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Add this after your middleware but before your routes
-app.get('/', (req, res) => {
-    res.json({
-        success: true,
-        message: '🐾 PawDeal API is running!',
-        version: '1.0.0',
-        endpoints: {
-            users: '/api/users',
-            pets: '/api/pets',
-            products: '/api/products',
-            auth: '/api/auth',
-            // Add your other endpoints here
-        }
-    });
-});
-
+// ========================================================
+// Image proxy endpoints (also before routes)
+// ========================================================
 // Image proxy endpoint for pets
 app.get('/api/images/pets/:filename', (req, res) => {
     const { filename } = req.params;
@@ -105,8 +94,27 @@ app.get('/api/images/products/:filename', (req, res) => {
     res.sendFile(imagePath);
 });
 
-app.use('/api/auth', limiter);
+// ========================================================
+// Root route
+// ========================================================
+app.get('/', (req, res) => {
+    res.json({
+        success: true,
+        message: '🐾 PawDeal API is running!',
+        version: '1.0.0',
+        endpoints: {
+            users: '/api/users',
+            pets: '/api/pets',
+            products: '/api/products',
+            auth: '/api/auth',
+        }
+    });
+});
 
+// ========================================================
+// API Routes
+// ========================================================
+app.use('/api/auth', limiter);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/pets', petRoutes);
@@ -140,6 +148,9 @@ app.get('/api/health/db', async (req, res) => {
 const messageHandler = require('./src/sockets/messageHandler');
 messageHandler(io);
 
+// ========================================================
+// Error handlers (ALWAYS at the end)
+// ========================================================
 app.use(notFound);
 app.use(errorHandler);
 
