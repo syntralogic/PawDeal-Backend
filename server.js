@@ -71,6 +71,22 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Serve static files from uploads directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Add this after your middleware but before your routes
+app.get('/', (req, res) => {
+    res.json({
+        success: true,
+        message: '🐾 PawDeal API is running!',
+        version: '1.0.0',
+        endpoints: {
+            users: '/api/users',
+            pets: '/api/pets',
+            products: '/api/products',
+            auth: '/api/auth',
+            // Add your other endpoints here
+        }
+    });
+});
+
 // Image proxy endpoint for pets
 app.get('/api/images/pets/:filename', (req, res) => {
     const { filename } = req.params;

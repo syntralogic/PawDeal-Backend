@@ -1,34 +1,19 @@
-// src/routes/productRoutes.js
 const express = require('express');
 const router = express.Router();
+const productController = require('../controllers/productController');
 const { authenticate } = require('../middleware/auth');
-const { validate, productValidation } = require('../middleware/validation');
-const { uploadMultiple } = require('../middleware/upload');
-const {
-    createProduct,
-    getProducts,
-    getProductById,
-    updateProduct,
-    deleteProduct,
-    uploadProductImages,
-    getProductImages,
-    deleteProductImage,
-    setPrimaryImage,
-    getProductsBySeller
-} = require('../controllers/productController');
 
 // Public routes
-router.get('/', getProducts);
-router.get('/seller/:sellerId', getProductsBySeller);
-router.get('/:id', getProductById);
-router.get('/:id/images', getProductImages);
+router.get('/', productController.getProducts);
+router.get('/featured', productController.getFeaturedProducts);
+router.get('/category/:category', productController.getProductsByCategory);
+router.get('/:id', productController.getProductById);
+router.get('/seller/:sellerId', productController.getProductsBySeller);
 
-// Protected routes (require login)
-router.post('/', authenticate, validate(productValidation.create), createProduct);
-router.put('/:id', authenticate, updateProduct);
-router.delete('/:id', authenticate, deleteProduct);
-router.post('/:id/images', authenticate, uploadMultiple('image', 5), uploadProductImages);
-router.delete('/:productId/images/:imageId', authenticate, deleteProductImage);
-router.put('/:productId/images/:imageId/primary', authenticate, setPrimaryImage);
+// Protected routes (require authentication)
+router.post('/', authenticate, productController.createProduct);
+router.put('/:id', authenticate, productController.updateProduct);
+router.delete('/:id', authenticate, productController.deleteProduct);
+router.put('/:id/stock', authenticate, productController.updateProductStock);
 
 module.exports = router;

@@ -1,100 +1,61 @@
-// src/controllers/petController.js
 const PetModel = require('../models/petModel');
-const UserModel = require('../models/userModel');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 
-// Configure multer for image upload
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        const uploadDir = path.join(__dirname, '../../uploads/pets');
-        if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir, { recursive: true });
-        }
-        cb(null, uploadDir);
-    },
-    filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + path.extname(file.originalname));
-    }
-});
-
-const fileFilter = (req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
-    if (allowedTypes.includes(file.mimetype)) {
-        cb(null, true);
-    } else {
-        cb(new Error('Invalid file type. Only JPEG, PNG, JPG, WEBP are allowed'), false);
-    }
-};
-
-const upload = multer({
-    storage: storage,
-    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
-    fileFilter: fileFilter
-});
-
-// Create new pet listing
-const createPet = async (req, res) => {
-    try {
-        const userId = req.user.id;
-        
-        const petData = {
-            ...req.body,
-            seller_id: userId
-        };
-        
-        const petId = await PetModel.create(petData);
-        
-        res.status(201).json({
-            success: true,
-            message: 'Pet listed successfully',
-            id: petId
-        });
-    } catch (error) {
-        console.error('Create pet error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to create pet listing'
-        });
-    }
-};
-
-// Get all pets
+// Get all pets with pagination and filters
 const getPets = async (req, res) => {
     try {
-        const { page = 1, limit = 20, category, gender, min_price, max_price, search, sort_by } = req.query;
+        const { 
+            page = 1, 
+            limit = 10, 
+            category, 
+            breed_id, 
+            status,
+            minPrice, 
+            maxPrice, 
+            search 
+        } = req.query;
         
-        const filters = {
-            category,
-            gender,
-            min_price,
-            max_price,
-            search,
-            sort_by
+        const filters = { 
+            category, 
+            breed_id, 
+            status,
+            minPrice, 
+            maxPrice, 
+            search 
         };
         
-        const pets = await PetModel.findAll(filters, page, limit);
+        // Remove undefined filters
+        Object.keys(filters).forEach(key => {
+            if (filters[key] === undefined || filters[key] === '') {
+                delete filters[key];
+            }
+        });
+        
+        const pets = await PetModel.findAll(filters, parseInt(page), parseInt(limit));
+        const total = await PetModel.count(filters);
         
         res.json({
             success: true,
-            ...pets
+            data: pets,
+            pagination: {
+                page: parseInt(page),
+                limit: parseInt(limit),
+                total,
+                pages: Math.ceil(total / limit)
+            }
         });
     } catch (error) {
         console.error('Get pets error:', error);
         res.status(500).json({
             success: false,
-            error: 'Failed to fetch pets'
+            error: error.message
         });
     }
 };
 
-// Get single pet
+// Get single pet by ID
 const getPetById = async (req, res) => {
     try {
         const { id } = req.params;
-        
         const pet = await PetModel.findById(id);
         
         if (!pet) {
@@ -107,27 +68,52 @@ const getPetById = async (req, res) => {
         // Increment view count
         await PetModel.incrementViews(id);
         
+        // Get pet images
+        const images = await PetModel.getImages(id);
+        pet.images = images;
+        
         res.json({
             success: true,
-            pet
+            data: pet
         });
     } catch (error) {
-        console.error('Get pet error:', error);
+        console.error('Get pet by ID error:', error);
         res.status(500).json({
             success: false,
-            error: 'Failed to fetch pet'
+            error: error.message
         });
     }
 };
 
-// Update pet
+// Create a new pet
+const createPet = async (req, res) => {
+    try {
+        const petData = req.body;
+        petData.seller_id = req.user.id; // Assuming you have authentication middleware
+        
+        const petId = await PetModel.create(petData);
+        const pet = await PetModel.findById(petId);
+        
+        res.status(201).json({
+            success: true,
+            data: pet
+        });
+    } catch (error) {
+        console.error('Create pet error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+};
+
+// Update a pet
 const updatePet = async (req, res) => {
     try {
         const { id } = req.params;
-        const userId = req.user.id;
+        const petData = req.body;
         
         const pet = await PetModel.findById(id);
-        
         if (!pet) {
             return res.status(404).json({
                 success: false,
@@ -135,36 +121,36 @@ const updatePet = async (req, res) => {
             });
         }
         
-        if (pet.seller_id !== userId) {
+        // Check if user owns this pet (optional)
+        if (pet.seller_id !== req.user.id && req.user.role !== 'admin') {
             return res.status(403).json({
                 success: false,
-                error: 'You do not have permission to update this pet'
+                error: 'You are not authorized to update this pet'
             });
         }
         
-        await PetModel.update(id, req.body);
+        await PetModel.update(id, petData);
+        const updatedPet = await PetModel.findById(id);
         
         res.json({
             success: true,
-            message: 'Pet updated successfully'
+            data: updatedPet
         });
     } catch (error) {
         console.error('Update pet error:', error);
         res.status(500).json({
             success: false,
-            error: 'Failed to update pet'
+            error: error.message
         });
     }
 };
 
-// Delete pet
+// Delete a pet (soft delete)
 const deletePet = async (req, res) => {
     try {
         const { id } = req.params;
-        const userId = req.user.id;
         
         const pet = await PetModel.findById(id);
-        
         if (!pet) {
             return res.status(404).json({
                 success: false,
@@ -172,10 +158,11 @@ const deletePet = async (req, res) => {
             });
         }
         
-        if (pet.seller_id !== userId) {
+        // Check if user owns this pet (optional)
+        if (pet.seller_id !== req.user.id && req.user.role !== 'admin') {
             return res.status(403).json({
                 success: false,
-                error: 'You do not have permission to delete this pet'
+                error: 'You are not authorized to delete this pet'
             });
         }
         
@@ -189,152 +176,68 @@ const deletePet = async (req, res) => {
         console.error('Delete pet error:', error);
         res.status(500).json({
             success: false,
-            error: 'Failed to delete pet'
+            error: error.message
         });
     }
 };
 
-// Upload pet image
-const uploadPetImage = async (req, res) => {
+// Get pets by seller
+const getPetsBySeller = async (req, res) => {
+    try {
+        const { sellerId } = req.params;
+        const { status } = req.query;
+        
+        const pets = await PetModel.findBySeller(sellerId, status);
+        
+        res.json({
+            success: true,
+            data: pets
+        });
+    } catch (error) {
+        console.error('Get pets by seller error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+};
+
+// Update pet status
+const updatePetStatus = async (req, res) => {
     try {
         const { id } = req.params;
-        const userId = req.user.id;
+        const { status } = req.body;
         
-        // Check if user owns the pet
         const pet = await PetModel.findById(id);
-        if (!pet || pet.seller_id !== userId) {
-            return res.status(403).json({
+        if (!pet) {
+            return res.status(404).json({
                 success: false,
-                error: 'You do not have permission to add images to this pet'
+                error: 'Pet not found'
             });
         }
         
-        if (!req.file) {
-            return res.status(400).json({
-                success: false,
-                error: 'No image file provided'
-            });
-        }
-        
-        // Save image path
-        const imageUrl = `/uploads/pets/${req.file.filename}`;
-        
-        // Check if this is the first image (make it primary)
-        const existingImages = await PetModel.query(
-            'SELECT COUNT(*) as count FROM pet_images WHERE pet_id = ?',
-            [id]
-        );
-        const isPrimary = existingImages[0].count === 0;
-        
-        await PetModel.addImage(id, imageUrl, isPrimary);
+        await PetModel.updateStatus(id, status);
+        const updatedPet = await PetModel.findById(id);
         
         res.json({
             success: true,
-            message: 'Image uploaded successfully',
-            imageUrl,
-            isPrimary
+            data: updatedPet
         });
     } catch (error) {
-        console.error('Upload pet image error:', error);
+        console.error('Update pet status error:', error);
         res.status(500).json({
             success: false,
-            error: 'Failed to upload image'
-        });
-    }
-};
-
-// Get pet images
-const getPetImages = async (req, res) => {
-    try {
-        const { id } = req.params;
-        
-        const images = await PetModel.query(
-            'SELECT * FROM pet_images WHERE pet_id = ? ORDER BY sort_order',
-            [id]
-        );
-        
-        res.json({
-            success: true,
-            images
-        });
-    } catch (error) {
-        console.error('Get pet images error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to fetch images'
-        });
-    }
-};
-
-// Delete pet image
-const deletePetImage = async (req, res) => {
-    try {
-        const { id, imageId } = req.params;
-        const userId = req.user.id;
-        
-        // Check if user owns the pet
-        const pet = await PetModel.findById(id);
-        if (!pet || pet.seller_id !== userId) {
-            return res.status(403).json({
-                success: false,
-                error: 'You do not have permission to delete images from this pet'
-            });
-        }
-        
-        await PetModel.removeImage(imageId);
-        
-        res.json({
-            success: true,
-            message: 'Image deleted successfully'
-        });
-    } catch (error) {
-        console.error('Delete pet image error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to delete image'
-        });
-    }
-};
-
-// Set primary image
-const setPrimaryImage = async (req, res) => {
-    try {
-        const { id, imageId } = req.params;
-        const userId = req.user.id;
-        
-        // Check if user owns the pet
-        const pet = await PetModel.findById(id);
-        if (!pet || pet.seller_id !== userId) {
-            return res.status(403).json({
-                success: false,
-                error: 'You do not have permission to modify this pet'
-            });
-        }
-        
-        await PetModel.setPrimaryImage(id, imageId);
-        
-        res.json({
-            success: true,
-            message: 'Primary image updated'
-        });
-    } catch (error) {
-        console.error('Set primary image error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to set primary image'
+            error: error.message
         });
     }
 };
 
 module.exports = {
-    createPet,
     getPets,
     getPetById,
+    createPet,
     updatePet,
     deletePet,
-    uploadPetImage,
-    getPetImages,
-    deletePetImage,
-    setPrimaryImage,
-    upload
+    getPetsBySeller,
+    updatePetStatus
 };

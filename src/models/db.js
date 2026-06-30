@@ -1,14 +1,20 @@
-// src/models/db.js
+// Use this if config is at the root level (outside src)
 const { pool } = require('../config/database');
 
 class DB {
     // Execute query with parameters
     static async query(sql, params = []) {
         try {
-            const [results] = await pool.execute(sql, params);
+            // Ensure params is always an array
+            if (!Array.isArray(params)) {
+                params = [params];
+            }
+            const [results] = await pool.query(sql, params);
             return results;
         } catch (error) {
-            console.error('Database query error:', error);
+            console.error('Database query error:', error.message);
+            console.error('SQL:', sql);
+            console.error('Params:', params);
             throw error;
         }
     }
@@ -21,19 +27,28 @@ class DB {
 
     // Insert and return insert ID
     static async insert(sql, params = []) {
-        const [result] = await pool.execute(sql, params);
+        if (!Array.isArray(params)) {
+            params = [params];
+        }
+        const [result] = await pool.query(sql, params);
         return result.insertId;
     }
 
     // Update and return affected rows
     static async update(sql, params = []) {
-        const [result] = await pool.execute(sql, params);
+        if (!Array.isArray(params)) {
+            params = [params];
+        }
+        const [result] = await pool.query(sql, params);
         return result.affectedRows;
     }
 
     // Delete and return affected rows
     static async delete(sql, params = []) {
-        const [result] = await pool.execute(sql, params);
+        if (!Array.isArray(params)) {
+            params = [params];
+        }
+        const [result] = await pool.query(sql, params);
         return result.affectedRows;
     }
 

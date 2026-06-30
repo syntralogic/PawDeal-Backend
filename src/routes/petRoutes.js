@@ -1,31 +1,17 @@
-// src/routes/petRoutes.js
 const express = require('express');
 const router = express.Router();
+const petController = require('../controllers/petController');
 const { authenticate } = require('../middleware/auth');
-const {
-    createPet,
-    getPets,
-    getPetById,
-    updatePet,
-    deletePet,
-    uploadPetImage,
-    getPetImages,
-    deletePetImage,
-    setPrimaryImage,
-    upload
-} = require('../controllers/petController');
 
 // Public routes
-router.get('/', getPets);
-router.get('/:id', getPetById);
-router.get('/:id/images', getPetImages);
+router.get('/', petController.getPets);
+router.get('/:id', petController.getPetById);
+router.get('/seller/:sellerId', petController.getPetsBySeller);
 
-// Protected routes (require login)
-router.post('/', authenticate, createPet);
-router.put('/:id', authenticate, updatePet);
-router.delete('/:id', authenticate, deletePet);
-router.post('/:id/images', authenticate, upload.single('image'), uploadPetImage);
-router.delete('/:id/images/:imageId', authenticate, deletePetImage);
-router.put('/:id/images/:imageId/primary', authenticate, setPrimaryImage);
+// Protected routes (require authentication)
+router.post('/', authenticate, petController.createPet);
+router.put('/:id', authenticate, petController.updatePet);
+router.delete('/:id', authenticate, petController.deletePet);
+router.put('/:id/status', authenticate, petController.updatePetStatus);
 
 module.exports = router;
