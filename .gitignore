@@ -7,10 +7,6 @@ package-lock.json
 .env.local
 .env.production
 
-# Uploads
-uploads/*
-!uploads/.gitkeep
-
 # Logs
 logs
 *.log
